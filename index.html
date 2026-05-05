@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MALICE.BIZ</title>
+
+  <style>
+    /* reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* page */
+    body {
+      background: #0a0a0a;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* pattern container */
+    .pattern-layer {
+      position: fixed;
+      top: -150%;
+      left: -150%;
+      width: 500%;
+      height: 500%;
+      transform: perspective(800px) rotateX(20deg) rotateZ(45deg);
+      transform-origin: center center;
+      animation: drift 80s linear infinite;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* word styles */
+    .pattern-layer span {
+      position: absolute;
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: 5px;
+      white-space: nowrap;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    /* opacity variation */
+    .pattern-layer span:nth-child(3n)  { color: rgba(255, 255, 255, 0.50); }
+    .pattern-layer span:nth-child(5n)  { color: rgba(255, 255, 255, 0.25); }
+    .pattern-layer span:nth-child(7n)  { color: rgba(255, 255, 255, 0.60); }
+    .pattern-layer span:nth-child(11n) { color: rgba(255, 255, 255, 0.40); }
+
+    /* drift animation (overridden by js) */
+    @keyframes drift {
+      0%   { transform: perspective(800px) rotateX(20deg) rotateZ(45deg) translate(0, 0); }
+      100% { transform: perspective(800px) rotateX(20deg) rotateZ(45deg) translate(-200px, -200px); }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="pattern-layer" id="patternLayer"></div>
+
+  <script>
+    (function () {
+      const patternLayer = document.getElementById('patternLayer');
+
+      // random drift direction
+      const randomAngle = Math.random() * 2 * Math.PI;
+      const driftDistance = 200;
+      const driftX = Math.round(Math.cos(randomAngle) * driftDistance);
+      const driftY = Math.round(Math.sin(randomAngle) * driftDistance);
+
+      // inject random keyframes
+      const dynamicStyle = document.createElement('style');
+      dynamicStyle.textContent =
+        '@keyframes drift {' +
+        '  0%   { transform: perspective(800px) rotateX(20deg) rotateZ(45deg) translate(0, 0); }' +
+        '  100% { transform: perspective(800px) rotateX(20deg) rotateZ(45deg) translate(' + driftX + 'px, ' + driftY + 'px); }' +
+        '}';
+      document.head.appendChild(dynamicStyle);
+
+      // generate word elements
+      const wordCount = 800;
+      const opacityLevels = [0.25, 0.35, 0.40, 0.50, 0.60];
+      const fragment = document.createDocumentFragment();
+
+      for (let i = 0; i < wordCount; i++) {
+        const word = document.createElement('span');
+        word.textContent = 'MALICE';
+
+        // position, tilt, opacity, size
+        word.style.left = (Math.random() * 100) + '%';
+        word.style.top = (Math.random() * 100) + '%';
+
+        const tilt = Math.random() * 30 - 15;
+        word.style.transform = 'rotate(' + tilt + 'deg)';
+
+        const opacity = opacityLevels[Math.floor(Math.random() * opacityLevels.length)];
+        word.style.color = 'rgba(255, 255, 255, ' + opacity + ')';
+
+        word.style.fontSize = (20 + Math.random() * 20) + 'px';
+
+        fragment.appendChild(word);
+      }
+
+      patternLayer.appendChild(fragment);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Power 4</title>
+
+<style>
+/* reset & base */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: .5em;
+  /* kill mobile tap nonsense */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* status bar */
+#status {
+  font-size: clamp(1rem, 3.5vw, 1.4rem);
+  margin-bottom: .4em;
+  min-height: 1.6em;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* the grid */
+#board {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 2px solid #fff;
+  cursor: pointer;
+  width: clamp(280px, 90vw, 560px);
+}
+
+.cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(1.6rem, 8vw, 3.2rem);
+  border: 1px solid #333;
+  line-height: 1;
+}
+.cell:active { background: #222; }
+
+/* player colours */
+.p1 { color: #ff0d00; }
+.p2 { color: #1100ff; }
+
+/* winning cells get a glow */
+.win { text-shadow: 0 0 8px currentColor, 0 0 16px currentColor; }
+
+/* controls */
+#controls {
+  margin-top: .6em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5em;
+}
+
+button, select, label {
+  font-family: inherit;
+  font-size: clamp(.85rem, 2.5vw, 1.1rem);
+  background: #000;
+  color: #fff;
+  border: 1px solid #fff;
+  padding: .35em .8em;
+  cursor: pointer;
+}
+button:active { background: #fff; color: #000; }
+
+/* timer */
+#timer-row {
+  display: flex;
+  gap: .8em;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#clock1, #clock2 {
+  font-size: clamp(1rem, 3vw, 1.4rem);
+  padding: .2em .5em;
+  min-width: 4em;
+  text-align: center;
+}
+#clock1 { color: #ff0d00; border: 1px solid #ff0d00; }
+#clock2 { color: #1100ff; border: 1px solid #1100ff; }
+
+.active-clock { text-shadow: 0 0 6px currentColor; }
+
+#timer-cfg {
+  display: flex;
+  gap: .5em;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="status"></div>
+<div id="board"></div>
+
+<div id="controls">
+  <button id="reset">RESET</button>
+
+  <div id="timer-cfg">
+    <label><input type="checkbox" id="timer-toggle"> Timer</label>
+    <select id="timer-preset" class="hidden">
+      <option value="60">1 min</option>
+      <option value="180" selected>3 min</option>
+      <option value="300">5 min</option>
+      <option value="10">10s blitz</option>
+    </select>
+  </div>
+
+  <div id="timer-row" class="hidden">
+    <span id="clock1">-:--</span>
+    <span style="color:#fff">vs</span>
+    <span id="clock2">-:--</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // board dimensions
+  var ROWS = 6;
+  var COLS = 7;
+
+  // game state
+  var grid;      // 2d array, 0 = empty, 1 = red, 2 = blue
+  var turn;      // whose turn (1 or 2)
+  var over;      // is the game done?
+  var winCells;  // coords of the winning line (if any)
+
+  // timer state
+  var timerOn;
+  var secs;
+  var clocks;    // [p1 remaining, p2 remaining]
+  var tick;      // interval id
+  var started;   // has any piece been dropped yet?
+
+  // grab DOM refs once
+  var boardEl  = document.getElementById('board');
+  var statusEl = document.getElementById('status');
+  var resetBtn = document.getElementById('reset');
+  var togEl    = document.getElementById('timer-toggle');
+  var preEl    = document.getElementById('timer-preset');
+  var rowEl    = document.getElementById('timer-row');
+  var c1El     = document.getElementById('clock1');
+  var c2El     = document.getElementById('clock2');
+
+  // reset everything, fresh game
+  function init() {
+    // build empty grid
+    grid = [];
+    for (var r = 0; r < ROWS; r++) {
+      grid[r] = [];
+      for (var c = 0; c < COLS; c++) grid[r][c] = 0;
+    }
+
+    turn = 1;
+    over = false;
+    winCells = [];
+    started = false;
+
+    stopTick();
+
+    // read timer settings from DOM
+    timerOn = togEl.checked;
+    secs = parseInt(preEl.value, 10);
+    clocks = [secs, secs];
+
+    draw();
+    updateStatus();
+    updateClockDisplay();
+  }
+
+  // render the board (nuke innerHTML, it's 42 cells, who cares)
+  function draw() {
+    boardEl.innerHTML = '';
+
+    for (var r = 0; r < ROWS; r++) {
+      for (var c = 0; c < COLS; c++) {
+        var cell = document.createElement('div');
+        cell.className = 'cell';
+
+        var val = grid[r][c];
+        if (val === 1) {
+          cell.textContent = '●';
+          cell.classList.add('p1');
+        } else if (val === 2) {
+          cell.textContent = '●';
+          cell.classList.add('p2');
+        } else {
+          cell.textContent = '·';  // empty dot
+        }
+
+        // highlight winning pieces
+        if (belongsToWin(r, c)) cell.classList.add('win');
+
+        // closure trick so click knows which column
+        (function (col) {
+          cell.addEventListener('click', function () { drop(col); });
+        })(c);
+
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  // is this cell part of the winning line?
+  function belongsToWin(r, c) {
+    for (var i = 0; i < winCells.length; i++) {
+      if (winCells[i][0] === r && winCells[i][1] === c) return true;
+    }
+    return false;
+  }
+
+  // drop a piece in a column, gravity does the rest
+  function drop(col) {
+    if (over) return;
+
+    // find lowest empty row in this column
+    var row = -1;
+    for (var r = ROWS - 1; r >= 0; r--) {
+      if (grid[r][col] === 0) { row = r; break; }
+    }
+    if (row < 0) return; // column full, ignore
+
+    // place the piece
+    grid[row][col] = turn;
+
+    // did that win?
+    var w = checkWin(row, col);
+    if (w) {
+      over = true;
+      winCells = w;
+      stopTick();
+      draw();
+      updateStatus();
+      return;
+    }
+
+    // board full = draw
+    if (isBoardFull()) {
+      over = true;
+      stopTick();
+      draw();
+      updateStatus();
+      return;
+    }
+
+    // next player's turn
+    turn = turn === 1 ? 2 : 1;
+    draw();
+    updateStatus();
+
+    // kick off timer on first move
+    if (timerOn) {
+      if (!started) started = true;
+      stopTick();
+      startTick();
+    }
+  }
+
+  // check if last move made 4 in a row (horiz, vert, both diags)
+  function checkWin(r, c) {
+    var player = grid[r][c];
+    // directions: right, down, down-right, down-left
+    var directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+
+    for (var d = 0; d < directions.length; d++) {
+      var cells = [[r, c]];
+
+      // look both ways along this direction
+      for (var sign = -1; sign <= 1; sign += 2) {
+        for (var i = 1; i < 4; i++) {
+          var nr = r + directions[d][0] * i * sign;
+          var nc = c + directions[d][1] * i * sign;
+          if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) break;
+          if (grid[nr][nc] !== player) break;
+          cells.push([nr, nc]);
+        }
+      }
+
+      if (cells.length >= 4) return cells;
+    }
+    return null;  // no win
+  }
+
+  // literally just checks if top row is all filled
+  function isBoardFull() {
+    for (var c = 0; c < COLS; c++) {
+      if (grid[0][c] === 0) return false;
+    }
+    return true;
+  }
+
+  // update the "whose turn / who won" text
+  function updateStatus() {
+    if (over) {
+      if (winCells.length) {
+        var cls = turn === 1 ? 'p1' : 'p2';
+        statusEl.innerHTML = 'Player <span class="' + cls + '">●</span> wins!';
+      } else {
+        statusEl.textContent = 'Draw — no moves left!';
+      }
+    } else {
+      var cls = turn === 1 ? 'p1' : 'p2';
+      statusEl.innerHTML = 'Player <span class="' + cls + '">●</span> turn';
+    }
+  }
+
+  // clicking status before first move lets you swap who goes first
+  statusEl.addEventListener('click', function () {
+    if (started || over) return;
+    turn = turn === 1 ? 2 : 1;
+    updateStatus();
+  });
+
+  // timer / clock stuff
+
+  // format seconds into m:ss
+  function formatTime(s) {
+    return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+  }
+
+  // refresh the clock display
+  function updateClockDisplay() {
+    c1El.textContent = timerOn ? formatTime(clocks[0]) : '-:--';
+    c2El.textContent = timerOn ? formatTime(clocks[1]) : '-:--';
+    c1El.classList.toggle('active-clock', timerOn && turn === 1 && !over);
+    c2El.classList.toggle('active-clock', timerOn && turn === 2 && !over);
+  }
+
+  // tick down active player's clock every second
+  function startTick() {
+    if (!timerOn || over) return;
+
+    tick = setInterval(function () {
+      clocks[turn - 1]--;
+      updateClockDisplay();
+
+      // ran out of time? other player wins
+      if (clocks[turn - 1] <= 0) {
+        clocks[turn - 1] = 0;
+        over = true;
+        turn = turn === 1 ? 2 : 1;  // winner is the other guy
+        stopTick();
+        updateStatus();
+        updateClockDisplay();
+        statusEl.innerHTML += ' <small>(time)</small>';
+      }
+    }, 1000);
+  }
+
+  function stopTick() {
+    if (tick) { clearInterval(tick); tick = null; }
+  }
+
+  // wire up controls
+
+  // toggle timer on/off
+  togEl.addEventListener('change', function () {
+    preEl.classList.toggle('hidden', !togEl.checked);
+    rowEl.classList.toggle('hidden', !togEl.checked);
+    init();
+  });
+
+  // changing time preset resets game
+  preEl.addEventListener('change', function () { init(); });
+
+  // big red reset button
+  resetBtn.addEventListener('click', function () { init(); });
+
+  //  yeehawww
+  init();
+})();
+</script>
+</body>
+</html>
