@@ -1,9 +1,7 @@
 <?php
 $noteDir = __DIR__ . '/notes';
 $notes = glob($noteDir . '/*.txt');
-usort($notes, function ($a, $b) {
-    return filemtime($b) - filemtime($a);
-});
+sort($notes);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -45,7 +43,6 @@ body {
 <div class="notes">
 <?php foreach ($notes as $file): ?>
   <div class="note">
-    <time><?= date('Y-m-d', filemtime($file)) ?></time>
     <p><?= htmlspecialchars(file_get_contents($file)) ?></p>
   </div>
 <?php endforeach; ?>

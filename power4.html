@@ -31,7 +31,6 @@ body {
   margin-bottom: .4em;
   min-height: 1.6em;
   text-align: center;
-  cursor: pointer;
 }
 
 /* the grid */
@@ -58,8 +57,7 @@ body {
 .p1 { color: #ff0d00; }
 .p2 { color: #1100ff; }
 
-/* winning cells get a glow */
-.win { text-shadow: 0 0 8px currentColor, 0 0 16px currentColor; }
+
 
 /* controls */
 #controls {
@@ -101,13 +99,7 @@ button:active { background: #fff; color: #000; }
 
 .active-clock { text-shadow: 0 0 6px currentColor; }
 
-#timer-cfg {
-  display: flex;
-  gap: .5em;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-}
+
 
 .hidden { display: none !important; }
 </style>
@@ -120,15 +112,12 @@ button:active { background: #fff; color: #000; }
 <div id="controls">
   <button id="reset">RESET</button>
 
-  <div id="timer-cfg">
-    <label><input type="checkbox" id="timer-toggle"> Timer</label>
-    <select id="timer-preset" class="hidden">
-      <option value="60">1 min</option>
-      <option value="180" selected>3 min</option>
-      <option value="300">5 min</option>
-      <option value="10">10s blitz</option>
-    </select>
-  </div>
+  <select id="timer-preset">
+    <option value="0" selected>No timer</option>
+    <option value="10">10s</option>
+    <option value="30">30s</option>
+    <option value="60">1 min</option>
+  </select>
 
   <div id="timer-row" class="hidden">
     <span id="clock1">-:--</span>
@@ -160,7 +149,6 @@ button:active { background: #fff; color: #000; }
   var boardEl  = document.getElementById('board');
   var statusEl = document.getElementById('status');
   var resetBtn = document.getElementById('reset');
-  var togEl    = document.getElementById('timer-toggle');
   var preEl    = document.getElementById('timer-preset');
   var rowEl    = document.getElementById('timer-row');
   var c1El     = document.getElementById('clock1');
@@ -183,8 +171,8 @@ button:active { background: #fff; color: #000; }
     stopTick();
 
     // read timer settings from DOM
-    timerOn = togEl.checked;
     secs = parseInt(preEl.value, 10);
+    timerOn = secs > 0;
     clocks = [secs, secs];
 
     draw();
@@ -208,12 +196,7 @@ button:active { background: #fff; color: #000; }
         } else if (val === 2) {
           cell.textContent = '●';
           cell.classList.add('p2');
-        } else {
-          cell.textContent = '·';  // empty dot
         }
-
-        // highlight winning pieces
-        if (belongsToWin(r, c)) cell.classList.add('win');
 
         // closure trick so click knows which column
         (function (col) {
@@ -223,14 +206,6 @@ button:active { background: #fff; color: #000; }
         boardEl.appendChild(cell);
       }
     }
-  }
-
-  // is this cell part of the winning line?
-  function belongsToWin(r, c) {
-    for (var i = 0; i < winCells.length; i++) {
-      if (winCells[i][0] === r && winCells[i][1] === c) return true;
-    }
-    return false;
   }
 
   // drop a piece in a column, gravity does the rest
@@ -313,27 +288,12 @@ button:active { background: #fff; color: #000; }
     return true;
   }
 
-  // update the "whose turn / who won" text
   function updateStatus() {
-    if (over) {
-      if (winCells.length) {
-        var cls = turn === 1 ? 'p1' : 'p2';
-        statusEl.innerHTML = 'Player <span class="' + cls + '">●</span> wins!';
-      } else {
-        statusEl.textContent = 'Draw — no moves left!';
-      }
-    } else {
-      var cls = turn === 1 ? 'p1' : 'p2';
-      statusEl.innerHTML = 'Player <span class="' + cls + '">●</span> turn';
-    }
+    statusEl.textContent = over ? (winCells.length ? 'wins!' : 'Draw!') : 'turn';
+    statusEl.style.color = over && !winCells.length ? '#fff' : (turn === 1 ? '#ff0d00' : '#1100ff');
   }
 
-  // clicking status before first move lets you swap who goes first
-  statusEl.addEventListener('click', function () {
-    if (started || over) return;
-    turn = turn === 1 ? 2 : 1;
-    updateStatus();
-  });
+
 
   // timer / clock stuff
 
@@ -365,8 +325,8 @@ button:active { background: #fff; color: #000; }
         turn = turn === 1 ? 2 : 1;  // winner is the other guy
         stopTick();
         updateStatus();
+        statusEl.textContent += ' (time)';
         updateClockDisplay();
-        statusEl.innerHTML += ' <small>(time)</small>';
       }
     }, 1000);
   }
@@ -377,15 +337,11 @@ button:active { background: #fff; color: #000; }
 
   // wire up controls
 
-  // toggle timer on/off
-  togEl.addEventListener('change', function () {
-    preEl.classList.toggle('hidden', !togEl.checked);
-    rowEl.classList.toggle('hidden', !togEl.checked);
+  // changing time preset resets game & shows/hides clocks
+  preEl.addEventListener('change', function () {
+    rowEl.classList.toggle('hidden', preEl.value === '0');
     init();
   });
-
-  // changing time preset resets game
-  preEl.addEventListener('change', function () { init(); });
 
   // big red reset button
   resetBtn.addEventListener('click', function () { init(); });
